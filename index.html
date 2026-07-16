@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Tour Arrivals</title>
+    <style>
+        :root {
+            --bg-color: #f7f9fc;
+            --card-bg: #ffffff;
+            --text-main: #2d3748;
+            --text-muted: #718096;
+            --accent: #3182ce;
+            --accent-hover: #2b6cb0;
+        }
+
+        body.theme-mt { --bg-color: #fffbeb; --accent: #d97706; --accent-hover: #b45309; }
+        body.theme-jtj { --bg-color: #ecfdf5; --accent: #059669; --accent-hover: #047857; }
+        body.theme-babm { --bg-color: #fef2f2; --accent: #dc2626; --accent-hover: #b91c1c; }
+        body.theme-ga { --bg-color: #ebf8ff; --accent: #3182ce; --accent-hover: #2b6cb0; }
+
+        body, html {
+            margin: 0; padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            height: 100%; display: flex; flex-direction: column; overflow: hidden;
+            transition: background-color 0.4s ease, color 0.4s ease;
+        }
+
+        .view {
+            display: none; flex: 1; flex-direction: column;
+            align-items: center; justify-content: center;
+            padding: 20px; text-align: center; width: 100%; box-sizing: border-box;
+            position: relative;
+        }
+        .view.active { display: flex; }
+
+        .button-group {
+            display: flex; flex-direction: column; gap: 15px; width: 100%; max-width: 320px;
+        }
+        .file-btn-wrapper { position: relative; overflow: hidden; width: 100%; }
+        .file-btn-wrapper.dragover .camera-btn {
+            outline: 3px dashed var(--accent);
+            outline-offset: 3px;
+        }
+        .camera-btn {
+            width: 100%; padding: 20px; font-size: 1.1rem; font-weight: bold;
+            background-color: var(--accent); color: white; border: none;
+            border-radius: 12px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: background-color 0.2s, outline 0.15s; display: flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        .camera-btn:hover { background-color: var(--accent-hover); }
+        .file-btn-wrapper input[type=file] {
+            font-size: 100px; position: absolute; left: 0; top: 0; opacity: 0; cursor: pointer; height: 100%; width: 100%;
+        }
+        .secondary-btn {
+            background-color: var(--card-bg); color: var(--text-main); border: 2px solid #e2e8f0;
+        }
+
+        .progress-container { display: none; width: 100%; max-width: 300px; margin-top: 30px; }
+        .progress-bar { width: 100%; height: 8px; background-color: #e2e8f0; border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; background-color: var(--accent); width: 0%; transition: width 0.2s; }
+        #status-text { color: var(--text-muted); margin-top: 15px; font-size: 0.95rem; font-weight: 500;}
+        #error-text { color: #dc2626; margin-top: 15px; font-size: 0.9rem; font-weight: 500; display: none; max-width: 320px; }
+
+        #main-view-content { transition: transform 0.3s ease-out, opacity 0.15s; }
+        .acronym { font-size: 1.5rem; font-weight: 700; color: var(--accent); letter-spacing: 2px; margin-bottom: 10px; transition: color 0.4s ease;}
+        .time { font-size: 4.5rem; font-weight: 700; margin: 0; color: var(--text-main); letter-spacing: -2px;}
+        .guest-name { font-size: 1.2rem; font-weight: 600; color: var(--text-main); margin-top: 10px; }
+        .visitors { font-size: 1.5rem; margin-top: 10px; color: var(--text-muted); }
+        .visitors span { font-weight: bold; color: var(--accent); transition: color 0.4s ease; }
+
+        /* Navigation Arrows */
+        .nav-arrow {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.04);
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s, opacity 0.2s;
+            z-index: 5;
+        }
+        .nav-arrow:hover {
+            background: rgba(0, 0, 0, 0.08);
+            color: var(--text-main);
+        }
+        .nav-arrow.left { left: 20px; }
+        .nav-arrow.right { right: 20px; }
+        .nav-arrow.disabled {
+            opacity: 0;
+            pointer-events: none;
+            cursor: default;
+        }
+
+        .controls { display: none; text-align: center; width: 100%; padding-bottom: 40px; }
+        .controls.active { display: block; }
+        .view-all-btn {
+            padding: 15px 40px; font-size: 1rem; font-weight: 600; background-color: var(--card-bg);
+            color: var(--accent); border: 2px solid #e2e8f0; border-radius: 30px; cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: color 0.4s ease;
+        }
+        .new-file-btn {
+            margin-top: 12px; background: none; border: none; color: var(--text-muted);
+            font-size: 0.85rem; cursor: pointer; text-decoration: underline;
+        }
+
+        #modal {
+            position: fixed; top: 100%; left: 0; width: 100%; height: 100%;
+            background-color: var(--card-bg); z-index: 10; transition: top 0.3s ease-in-out;
+            display: flex; flex-direction: column;
+        }
+        #modal.open { top: 0; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 20px; border-bottom: 1px solid #e2e8f0; }
+        .modal-header h2 { margin: 0; font-size: 1.5rem; }
+        .modal-header-actions { display: flex; align-items: center; gap: 14px; }
+        .close-btn { background: none; border: none; font-size: 2rem; color: var(--text-muted); cursor: pointer; line-height: 1; }
+
+        .pencil-btn {
+            background: none; border: none; cursor: pointer; padding: 6px;
+            display: flex; align-items: center; justify-content: center;
+            color: #a0aec0; border-radius: 8px; transition: color 0.2s, background-color 0.2s;
+        }
+        .pencil-btn:hover { color: #718096; background-color: #f7f9fc; }
+        .pencil-btn.active { color: var(--accent); background-color: #f7f9fc; }
+
+        .add-entry-bar {
+            display: none; gap: 8px; flex-wrap: wrap; align-items: center;
+            padding: 14px 20px; border-bottom: 1px solid #e2e8f0; background-color: #f7f9fc;
+        }
+        .add-entry-bar.open { display: flex; }
+        .add-entry-bar select, .add-entry-bar input {
+            padding: 9px 10px; border: 1px solid #e2e8f0; border-radius: 8px;
+            font-size: 0.9rem; flex: 1; min-width: 90px; background: white; color: var(--text-main);
+        }
+        .add-entry-bar input[type="text"] { flex: 1 1 100%; }
+        .add-entry-bar button {
+            padding: 9px 16px; border: none; border-radius: 8px; background-color: var(--accent);
+            color: white; font-weight: 600; cursor: pointer; white-space: nowrap;
+        }
+
+        .list-container { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 8px; }
+
+        .list-item {
+            display: flex; justify-content: space-between; align-items: center; position: relative;
+            padding: 15px; border-radius: 8px; background-color: #f7f9fc;
+            border-left: 6px solid #e2e8f0; transition: opacity 0.3s, filter 0.3s;
+        }
+
+        .list-item.mt { border-left-color: #d97706; background-color: #fffbeb; }
+        .list-item.jtj { border-left-color: #059669; background-color: #ecfdf5; }
+        .list-item.babm { border-left-color: #dc2626; background-color: #fef2f2; }
+        .list-item.ga { border-left-color: #3182ce; background-color: #ebf8ff; }
+        .list-item.past { opacity: 0.45; filter: grayscale(40%); }
+
+        .list-container.edit-mode .list-item { cursor: pointer; padding-right: 46px; }
+        .list-container.edit-mode .list-item:hover { filter: brightness(0.97); }
+
+        .delete-x {
+            display: none; position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+            width: 26px; height: 26px; border-radius: 50%; background: white; border: 1px solid #e2e8f0;
+            color: #e53e3e; font-size: 1rem; align-items: center; justify-content: center; cursor: pointer;
+        }
+        .list-container.edit-mode .delete-x { display: flex; }
+
+        .edit-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; width: 100%; }
+        .edit-form select, .edit-form input {
+            padding: 7px 9px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem;
+        }
+        .edit-form input[type="text"] { flex: 1 1 100%; }
+        .edit-form .save-btn { background-color: var(--accent); color: white; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+        .edit-form .cancel-btn { background: white; color: var(--text-muted); border: 1px solid #e2e8f0; padding: 7px 14px; border-radius: 6px; cursor: pointer; }
+
+        .list-time { font-weight: bold; font-size: 1.1rem; }
+        .list-details { text-align: right; color: var(--text-muted); }
+        .list-details span { font-weight: bold; color: var(--text-main); }
+        .list-acronym { font-weight: 700; font-size: 0.9rem; }
+        .list-item.mt .list-acronym { color: #d97706; }
+        .list-item.jtj .list-acronym { color: #059669; }
+        .list-item.babm .list-acronym { color: #dc2626; }
+        .list-item.ga .list-acronym { color: #3182ce; }
+        .list-guest-name { font-size: 0.85rem; color: var(--text-main); margin-top: 3px; font-weight: 600; }
+
+        @media (max-width: 600px) {
+            .nav-arrow { width: 40px; height: 40px; font-size: 1.2rem; }
+            .nav-arrow.left { left: 10px; }
+            .nav-arrow.right { right: 10px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="setup-view" class="view active">
+        <h2 style="margin-bottom: 10px;">Load Daily Schedule</h2>
+        <p style="color: var(--text-muted); margin-top: 0; margin-bottom: 30px; font-size: 0.9rem; max-width: 320px;">
+            Upload the saved dashboard HTML file (or press <strong>Ctrl+V / Cmd+V</strong> to paste copied page source)
+        </p>
+
+        <div class="button-group" id="btn-group">
+            <div class="file-btn-wrapper" id="file-btn-wrapper">
+                <button class="camera-btn">📄 Upload Schedule HTML</button>
+                <input type="file" accept=".html,.htm,text/html" id="html-input">
+            </div>
+        </div>
+
+        <div class="progress-container" id="progress-container">
+            <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+            <p id="status-text">Processing file...</p>
+        </div>
+        <p id="error-text"></p>
+    </div>
+
+    <div id="main-view" class="view">
+        <button class="nav-arrow left disabled" id="nav-left" onclick="navigate(-1)" title="Previous">&#10094;</button>
+        <button class="nav-arrow right disabled" id="nav-right" onclick="navigate(1)" title="Next">&#10095;</button>
+
+        <div id="main-view-content">
+            <div class="acronym" id="display-acronym">--</div>
+            <div class="time" id="display-time">--:--</div>
+            <div class="guest-name" id="display-name"></div>
+            <div class="visitors" id="visitors-container">Expected Visitors: <span id="display-visitors">-</span></div>
+        </div>
+    </div>
+
+    <div class="controls" id="controls">
+        <button class="view-all-btn" onclick="toggleModal()">View All Arrivals</button>
+        <div><button class="new-file-btn" onclick="resetApp()">Load a different schedule</button></div>
+    </div>
+
+    <div id="modal">
+        <div class="modal-header">
+            <h2>Today's Arrivals</h2>
+            <div class="modal-header-actions">
+                <button class="pencil-btn" id="pencil-btn" onclick="toggleEditMode()" title="Manual entry / edit">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 20h9"></path>
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                    </svg>
+                </button>
+                <button class="close-btn" onclick="toggleModal()">&times;</button>
+            </div>
+        </div>
+        <div class="add-entry-bar" id="add-entry-bar">
+            <select id="add-acronym"></select>
+            <input type="time" id="add-time" />
+            <input type="number" min="0" id="add-visitors" placeholder="Visitors" />
+            <input type="text" id="add-name" placeholder="Guest name (optional)" />
+            <button onclick="addManualEntry()">Add</button>
+        </div>
+        <div class="list-container" id="list-container"></div>
+    </div>
+
+    <script>
+        // Acronym -> display name / default tour duration (minutes added to the
+        // scheduled start time to get the "arrival"/wrap time shown on screen).
+        const TOUR_INFO = {
+            MT:   { name: "Mansion Tour",              duration: 45 },
+            JTJ:  { name: "Journey to Jubilee",         duration: 60 },
+            BABM: { name: "Battle at Belle Meade",      duration: 60 },
+            GA:   { name: "Grounds Only Admission",     duration: 0  }
+        };
+
+        // How header column labels (from the FareHarbor dashboard's "items"
+        // header row) map to our internal acronyms. Matching is done via
+        // substring so minor label changes (e.g. "...: Civil War Tour") don't
+        // break things.
+        const ACRONYM_MATCHERS = [
+            { acronym: 'MT',   match: t => t.includes('Mansion Tour') },
+            { acronym: 'JTJ',  match: t => t.includes('Journey to Jubilee') },
+            { acronym: 'BABM', match: t => t.includes('Battle at Belle Meade') },
+            { acronym: 'GA',   match: t => t.includes('Grounds Only Admission') }
+        ];
+
+        let schedule = [];
+        let currentIndex = 0;
+        let editMode = false;
+
+        const htmlInput = document.getElementById('html-input');
+        const fileBtnWrapper = document.getElementById('file-btn-wrapper');
+        const btnGroup = document.getElementById('btn-group');
+        const progressContainer = document.getElementById('progress-container');
+        const progressFill = document.getElementById('progress-fill');
+        const statusText = document.getElementById('status-text');
+        const errorText = document.getElementById('error-text');
+        const navLeft = document.getElementById('nav-left');
+        const navRight = document.getElementById('nav-right');
+
+        htmlInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) handleFile(file);
+        });
+
+        // Drag & drop support
+        ['dragover', 'dragleave', 'drop'].forEach(evt => {
+            fileBtnWrapper.addEventListener(evt, (e) => {
+                e.preventDefault();
+                fileBtnWrapper.classList.toggle('dragover', evt === 'dragover');
+            });
+        });
+        fileBtnWrapper.addEventListener('drop', (e) => {
+            const file = e.dataTransfer.files && e.dataTransfer.files[0];
+            if (file) handleFile(file);
+        });
+
+        // Paste support: lets someone paste raw page-source HTML they copied
+        // (e.g. Ctrl+U / "view source" then Ctrl+A, Ctrl+C) directly in.
+        document.addEventListener('paste', (event) => {
+            if (!document.getElementById('setup-view').classList.contains('active')) return;
+            const cd = event.clipboardData || event.originalEvent.clipboardData;
+            if (!cd) return;
+            const text = cd.getData('text/plain') || cd.getData('text/html');
+            if (text && text.trim().length > 0) {
+                processHTMLText(text, 'Pasted schedule');
+            }
+        });
+
+        function handleFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => processHTMLText(e.target.result, file.name);
+            reader.onerror = () => showError("Couldn't read that file. Please try again.");
+            reader.readAsText(file);
+        }
+
+        function showError(msg) {
+            progressContainer.style.display = 'none';
+            btnGroup.style.display = 'flex';
+            errorText.style.display = 'block';
+            errorText.innerText = msg;
+        }
+
+        function processHTMLText(htmlText, sourceLabel) {
+            errorText.style.display = 'none';
+            btnGroup.style.display = 'none';
+            progressContainer.style.display = 'block';
+            progressFill.style.width = '60%';
+            statusText.innerText = `Parsing ${sourceLabel}...`;
+
+            // Give the UI a tick to paint the progress bar before parsing.
+            setTimeout(() => {
+                let parsed = [];
+                try {
+                    parsed = parseScheduleHTML(htmlText);
+                } catch (err) {
+                    console.error(err);
+                    showError("Something went wrong reading that schedule. Make sure it's a saved dashboard HTML file.");
+                    return;
+                }
+
+                progressFill.style.width = '100%';
+
+                if (parsed.length === 0) {
+                    const proceed = confirm("We couldn't find any scheduled arrivals in that file.\n\nClick 'OK' to proceed empty, or 'Cancel' to try a different file.");
+                    if (!proceed) { showError("Please choose another schedule file."); return; }
+                }
+
+                startApplication(parsed);
+            }, 150);
+        }
+
+        /**
+         * Parses a saved FareHarbor "day view" dashboard HTML export and
+         * extracts scheduled tour arrivals. Structure (as of the exported
+         * markup) looks like:
+         *
+         *   .bookings-grid-header .tr > .td   -- one per tour/product column
+         *   .table.bookings-grid > .tr        -- one row per time slot
+         *     > .td.bookings-td-legend        -- the row's time label
+         *     > .td (repeated)                -- one per tour/product column
+         *       > .cal-block (a)              -- one per scheduled instance
+         *         .cb-inline-stat             -- "N booked" visitor count
+         *         .cb-private-headline        -- optional private note
+         *         .cb-list.crew li span       -- assigned guide/crew name(s)
+         */
+        function parseScheduleHTML(htmlText) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlText, 'text/html');
+
+            const headerCells = doc.querySelectorAll('.bookings-grid-header .tr > .td');
+            if (headerCells.length === 0) return [];
+
+            const colAcronyms = [];
+            headerCells.forEach((cell, idx) => {
+                if (idx === 0) { colAcronyms.push(null); return; }
+                const text = cell.textContent.trim();
+                const found = ACRONYM_MATCHERS.find(m => m.match(text));
+                colAcronyms.push(found ? found.acronym : null);
+            });
+
+            const grid = doc.querySelector('.table.bookings-grid');
+            if (!grid) return [];
+
+            const rows = Array.from(grid.children).filter(el => el.classList && el.classList.contains('tr'));
+            const results = [];
+
+            rows.forEach(row => {
+                const tds = Array.from(row.children).filter(el => el.classList && el.classList.contains('td'));
+                if (tds.length === 0) return;
+
+                const legendText = tds[0].textContent.trim();
+                // Only keep rows with a real clock time (skips "All day" etc.)
+                if (!/^\d{1,2}:\d{2}\s*(AM|PM)$/i.test(legendText)) return;
+
+                tds.forEach((td, idx) => {
+                    if (idx === 0) return;
+                    const acronym = colAcronyms[idx];
+                    if (!acronym) return; // column isn't one we track
+
+                    const blocks = td.querySelectorAll('.cal-block');
+                    blocks.forEach(block => {
+                        const statSpan = block.querySelector('.cb-inline-stat');
+                        let visitors = 0;
+                        if (statSpan) {
+                            const n = parseInt(statSpan.textContent.trim(), 10);
+                            if (!isNaN(n)) visitors = n;
+                        }
+
+                        const headlineEl = block.querySelector('.cb-private-headline, .cb-headline .ng-binding');
+                        const headline = headlineEl ? headlineEl.textContent.trim() : '';
+
+                        const crewSpans = block.querySelectorAll('.cb-list.crew li span');
+                        const crewNames = Array.from(crewSpans)
+                            .map(s => s.textContent.trim())
+                            .filter(Boolean);
+
+                        let name = crewNames.join(', ');
+                        if (headline) name = name ? `${headline} — ${name}` : headline;
+
+                        const duration = (TOUR_INFO[acronym] && TOUR_INFO[acronym].duration) || 0;
+                        results.push({
+                            acronym,
+                            time: calculateArrivalTime(legendText, duration),
+                            visitors,
+                            baseTime: legendText,
+                            name
+                        });
+                    });
+                });
+            });
+
+            const nonZero = results.filter(r => r.visitors > 0);
+            nonZero.sort((a, b) => parseTimeStringToDate(a.time) - parseTimeStringToDate(b.time));
+            return nonZero;
+        }
+
+        document.getElementById('add-acronym').innerHTML = acronymOptionsHTML('MT');
+
+        function startApplication(parsedSchedule) {
+            schedule = parsedSchedule;
+            recalcCurrentIndex();
+
+            document.getElementById('setup-view').classList.remove('active');
+            document.getElementById('main-view').classList.add('active');
+            document.getElementById('controls').classList.add('active');
+
+            updateDisplay(); populateList();
+            setInterval(checkAutoAdvance, 60000);
+        }
+
+        function resetApp() {
+            schedule = [];
+            currentIndex = 0;
+            editMode = false;
+            document.getElementById('main-view').classList.remove('active');
+            document.getElementById('controls').classList.remove('active');
+            document.getElementById('modal').classList.remove('open');
+            document.getElementById('setup-view').classList.add('active');
+            btnGroup.style.display = 'flex';
+            progressContainer.style.display = 'none';
+            progressFill.style.width = '0%';
+            errorText.style.display = 'none';
+            htmlInput.value = '';
+        }
+
+        function recalcCurrentIndex() {
+            const now = new Date();
+            currentIndex = 0;
+            while (currentIndex < schedule.length) {
+                const arrivalTime = parseTimeStringToDate(schedule[currentIndex].time);
+                if (now >= new Date(arrivalTime.getTime() + 10 * 60000)) currentIndex++;
+                else break;
+            }
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        function updateDisplay() {
+            const acronymEl = document.getElementById('display-acronym');
+            const timeEl = document.getElementById('display-time');
+            const nameEl = document.getElementById('display-name');
+            const visitorsContainer = document.getElementById('visitors-container');
+
+            // Manage arrow states
+            if (navLeft) navLeft.classList.toggle('disabled', currentIndex === 0 || schedule.length === 0);
+            if (navRight) navRight.classList.toggle('disabled', currentIndex >= schedule.length);
+
+            if (schedule.length === 0 || currentIndex >= schedule.length) {
+                acronymEl.innerText = "All Caught Up!"; acronymEl.style.fontSize = "2.2rem";
+                timeEl.innerText = "🙌"; visitorsContainer.style.display = "none";
+                nameEl.style.display = "none"; nameEl.innerText = "";
+                document.body.className = ''; return;
+            }
+
+            acronymEl.style.fontSize = "1.5rem"; visitorsContainer.style.display = "block";
+            const current = schedule[currentIndex];
+            document.body.className = `theme-${current.acronym.toLowerCase()}`;
+
+            const fullName = (TOUR_INFO[current.acronym] && TOUR_INFO[current.acronym].name) || current.acronym;
+
+            acronymEl.innerText = fullName; timeEl.innerText = current.time;
+            document.getElementById('display-visitors').innerText = current.visitors;
+
+            if (current.name) {
+                nameEl.style.display = "block";
+                nameEl.innerText = current.name;
+            } else {
+                nameEl.style.display = "none";
+                nameEl.innerText = "";
+            }
+        }
+
+        function acronymOptionsHTML(selected) {
+            return Object.keys(TOUR_INFO).map(key => {
+                const sel = key === selected ? ' selected' : '';
+                return `<option value="${key}"${sel}>${TOUR_INFO[key].name}</option>`;
+            }).join('');
+        }
+
+        function populateList(editingIdx = -1) {
+            const listEl = document.getElementById('list-container');
+            listEl.innerHTML = '';
+            schedule.forEach((item, idx) => {
+                const div = document.createElement('div');
+                const themeClass = item.acronym.toLowerCase();
+                const pastClass = idx < currentIndex ? 'past' : '';
+                div.className = `list-item ${themeClass} ${pastClass}`;
+
+                if (editMode && idx === editingIdx) {
+                    div.innerHTML = `
+                        <div class="edit-form">
+                            <select id="edit-acronym-${idx}">${acronymOptionsHTML(item.acronym)}</select>
+                            <input type="time" id="edit-time-${idx}" value="${to24hr(item.baseTime)}" />
+                            <input type="number" min="0" id="edit-visitors-${idx}" value="${item.visitors}" style="width:70px;" />
+                            <input type="text" id="edit-name-${idx}" value="${escapeHtml(item.name || '')}" placeholder="Guest name (optional)" />
+                            <button class="save-btn" onclick="event.stopPropagation(); saveEditEntry(${idx})">Save</button>
+                            <button class="cancel-btn" onclick="event.stopPropagation(); populateList()">Cancel</button>
+                        </div>
+                    `;
+                } else {
+                    div.innerHTML = `
+                        <div class="list-time">${item.time}</div>
+                        <div class="list-details">
+                            <span class="list-acronym">${item.acronym}</span> &bull; <span>${item.visitors} visitors</span>
+                            ${item.name ? `<div class="list-guest-name">${escapeHtml(item.name)}</div>` : ''}
+                            <div style="font-size: 0.8rem; color: #a0aec0; margin-top: 4px;">Tour Start: ${item.baseTime}</div>
+                        </div>
+                        <div class="delete-x" onclick="deleteEntry(${idx}, event)" title="Remove">&times;</div>
+                    `;
+                    if (editMode) {
+                        div.addEventListener('click', () => populateList(idx));
+                    }
+                }
+                listEl.appendChild(div);
+            });
+        }
+
+        function toggleEditMode() {
+            editMode = !editMode;
+            document.getElementById('pencil-btn').classList.toggle('active', editMode);
+            document.getElementById('list-container').classList.toggle('edit-mode', editMode);
+            document.getElementById('add-entry-bar').classList.toggle('open', editMode);
+            populateList();
+        }
+
+        function addManualEntry() {
+            const acronym = document.getElementById('add-acronym').value;
+            const timeVal = document.getElementById('add-time').value;
+            const visitorsVal = parseInt(document.getElementById('add-visitors').value, 10);
+            const nameVal = document.getElementById('add-name').value.trim();
+
+            if (!timeVal || isNaN(visitorsVal) || visitorsVal < 0) {
+                alert("Please enter a valid tour start time and visitor count."); return;
+            }
+
+            const baseTimeStr = to12hr(timeVal);
+            const duration = (TOUR_INFO[acronym] && TOUR_INFO[acronym].duration) || 0;
+
+            schedule.push({
+                acronym,
+                time: calculateArrivalTime(baseTimeStr, duration),
+                visitors: visitorsVal,
+                baseTime: baseTimeStr,
+                name: nameVal
+            });
+            schedule.sort((a, b) => parseTimeStringToDate(a.time) - parseTimeStringToDate(b.time));
+
+            recalcCurrentIndex();
+            document.getElementById('add-time').value = '';
+            document.getElementById('add-visitors').value = '';
+            document.getElementById('add-name').value = '';
+            updateDisplay(); populateList();
+        }
+
+        function saveEditEntry(idx) {
+            const acronym = document.getElementById(`edit-acronym-${idx}`).value;
+            const timeVal = document.getElementById(`edit-time-${idx}`).value;
+            const visitorsVal = parseInt(document.getElementById(`edit-visitors-${idx}`).value, 10);
+            const nameVal = document.getElementById(`edit-name-${idx}`).value.trim();
+
+            if (!timeVal || isNaN(visitorsVal) || visitorsVal < 0) {
+                alert("Please enter a valid tour start time and visitor count."); return;
+            }
+
+            const baseTimeStr = to12hr(timeVal);
+            const duration = (TOUR_INFO[acronym] && TOUR_INFO[acronym].duration) || 0;
+
+            schedule[idx] = {
+                acronym, time: calculateArrivalTime(baseTimeStr, duration),
+                visitors: visitorsVal, baseTime: baseTimeStr, name: nameVal
+            };
+            schedule.sort((a, b) => parseTimeStringToDate(a.time) - parseTimeStringToDate(b.time));
+
+            recalcCurrentIndex(); updateDisplay(); populateList();
+        }
+
+        function deleteEntry(idx, evt) {
+            if (evt) evt.stopPropagation();
+            if (!confirm("Remove this arrival?")) return;
+            schedule.splice(idx, 1);
+            recalcCurrentIndex(); updateDisplay(); populateList();
+        }
+
+        function to12hr(timeVal) {
+            const [h24, m] = timeVal.split(':').map(Number);
+            const modifier = h24 >= 12 ? 'PM' : 'AM';
+            const h12 = h24 % 12 || 12;
+            return `${h12}:${m < 10 ? '0' + m : m} ${modifier}`;
+        }
+
+        function to24hr(timeStr) {
+            const [time, modifier] = timeStr.split(' ');
+            let [hours, minutes] = time.split(':').map(Number);
+            if (hours === 12 && modifier === 'AM') hours = 0;
+            if (hours < 12 && modifier === 'PM') hours += 12;
+            const hh = hours < 10 ? '0' + hours : '' + hours;
+            const mm = minutes < 10 ? '0' + minutes : '' + minutes;
+            return `${hh}:${mm}`;
+        }
+
+        // --- Navigation (Touch + Arrows) ---
+        function navigate(direction) {
+            if (direction === -1 && currentIndex > 0) {
+                currentIndex--;
+            } else if (direction === 1 && currentIndex < schedule.length) {
+                currentIndex++;
+            } else {
+                return;
+            }
+            animateTransition(); updateDisplay(); populateList();
+        }
+
+        let touchstartX = 0, touchendX = 0;
+        const mainView = document.getElementById('main-view');
+
+        mainView.addEventListener('touchstart', e => { touchstartX = e.changedTouches[0].screenX; });
+        mainView.addEventListener('touchend', e => {
+            touchendX = e.changedTouches[0].screenX;
+            if (touchstartX - touchendX > 50) navigate(1); // Swipe left = next
+            if (touchendX - touchstartX > 50) navigate(-1); // Swipe right = previous
+        });
+
+        function animateTransition() {
+            const content = document.getElementById('main-view-content');
+            content.style.opacity = 0;
+            setTimeout(() => { content.style.opacity = 1; }, 150);
+        }
+
+        function toggleModal() { document.getElementById('modal').classList.toggle('open'); }
+
+        function parseTimeStringToDate(timeStr) {
+            const [time, modifier] = timeStr.split(' ');
+            let [hours, minutes] = time.split(':');
+            hours = parseInt(hours, 10);
+            if (hours === 12 && modifier === 'AM') hours = 0;
+            if (hours < 12 && modifier === 'PM') hours += 12;
+
+            const date = new Date();
+            date.setHours(hours, parseInt(minutes, 10), 0, 0);
+            return date;
+        }
+
+        function calculateArrivalTime(timeStr, addMins) {
+            const date = parseTimeStringToDate(timeStr);
+            date.setMinutes(date.getMinutes() + addMins);
+            let h = date.getHours(), m = date.getMinutes();
+            let modifier = h >= 12 ? 'PM' : 'AM';
+            h = h % 12 || 12;
+            m = m < 10 ? '0' + m : m;
+            return `${h}:${m} ${modifier}`;
+        }
+
+        function checkAutoAdvance() {
+            if (currentIndex >= schedule.length) return;
+            const arrivalTime = parseTimeStringToDate(schedule[currentIndex].time);
+            if (new Date() >= new Date(arrivalTime.getTime() + 10 * 60000)) {
+                currentIndex++; animateTransition(); updateDisplay(); populateList();
+            }
+        }
+    </script>
+</body>
+</html>
