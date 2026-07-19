@@ -342,6 +342,16 @@
             GA:   '#7c3aed'
         };
 
+        // Per-tour light background color, matching the body.theme-* rules.
+        // Used to build a diagonal ombré gradient when two or three tours
+        // arrive simultaneously, instead of falling back to a single tone.
+        const TOUR_BG_COLORS = {
+            MT:   '#ebf8ff',
+            JTJ:  '#fffbeb',
+            BABM: '#ecfdf5',
+            GA:   '#f5f3ff'
+        };
+
         // How header column labels (from the FareHarbor dashboard's "items"
         // header row) map to our internal acronyms. Matching is done via
         // substring so minor label changes (e.g. "...: Civil War Tour") don't
@@ -553,6 +563,8 @@
             currentIndex = 0;
             editMode = false;
             hidePrompt();
+            document.body.className = '';
+            document.body.style.background = '';
             document.getElementById('main-view').classList.remove('active');
             document.getElementById('controls').classList.remove('active');
             document.getElementById('modal').classList.remove('open');
@@ -657,7 +669,7 @@
                 acronymEl.innerText = "All Caught Up!"; acronymEl.style.fontSize = "2.2rem";
                 timeEl.innerText = "🙌"; visitorsContainer.style.display = "none";
                 nameEl.style.display = "none"; nameEl.innerText = "";
-                document.body.className = ''; return;
+                document.body.className = ''; document.body.style.background = ''; return;
             }
 
             acronymEl.style.fontSize = "1.5rem"; visitorsContainer.style.display = "block";
@@ -670,6 +682,17 @@
 
             const primary = schedule[indices[0]];
             document.body.className = `theme-${primary.acronym.toLowerCase()}`;
+
+            if (indices.length > 1) {
+                // Duo/trio ombré: diagonal blend across each tour's own
+                // light background color, in the same left-to-right order
+                // they're presented in (Mansion Tour -> Journey to Jubilee
+                // -> Battle at Belle Meade).
+                const bgStops = indices.map(i => TOUR_BG_COLORS[schedule[i].acronym] || 'var(--bg-color)');
+                document.body.style.background = `linear-gradient(135deg, ${bgStops.join(', ')})`;
+            } else {
+                document.body.style.background = '';
+            }
 
             const nameItems = indices.map(i => ({
                 text: (TOUR_INFO[schedule[i].acronym] && TOUR_INFO[schedule[i].acronym].name) || schedule[i].acronym,
