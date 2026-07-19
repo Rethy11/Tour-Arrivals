@@ -112,6 +112,35 @@
             font-size: 0.85rem; cursor: pointer; text-decoration: underline;
         }
 
+        .arrival-prompt {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            max-width: 320px;
+            margin: 0 auto 14px auto;
+            padding: 12px 16px;
+            background-color: var(--card-bg);
+            border: 2px solid var(--accent);
+            border-radius: 14px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+            text-align: left;
+            transition: border-color 0.4s ease;
+        }
+        .arrival-prompt-text { font-size: 0.92rem; font-weight: 600; color: var(--text-main); }
+        .arrival-prompt-actions { display: flex; gap: 8px; flex-shrink: 0; }
+        .prompt-btn {
+            width: 36px; height: 36px; border-radius: 50%; border: none; cursor: pointer;
+            font-size: 1.1rem; font-weight: 700; color: white; display: flex;
+            align-items: center; justify-content: center;
+            transition: transform 0.15s ease, background-color 0.15s ease;
+        }
+        .prompt-btn:active { transform: scale(0.92); }
+        .prompt-btn.yes { background-color: #059669; }
+        .prompt-btn.yes:hover { background-color: #047857; }
+        .prompt-btn.no { background-color: #dc2626; }
+        .prompt-btn.no:hover { background-color: #b91c1c; }
+
         #modal {
             position: fixed; top: 100%; left: 0; width: 100%; height: 100%;
             background-color: var(--card-bg); z-index: 10; transition: top 0.3s ease-in-out;
@@ -150,9 +179,25 @@
 
         .list-item {
             display: flex; justify-content: space-between; align-items: center; position: relative;
-            padding: 15px; border-radius: 8px; background-color: #f7f9fc;
+            padding: 15px; padding-right: 56px; border-radius: 8px; background-color: #f7f9fc;
             border-left: 6px solid #e2e8f0; transition: opacity 0.3s, filter 0.3s;
         }
+
+        .list-actions {
+            position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+            display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+        }
+        .arrived-toggle-btn {
+            width: 26px; height: 26px; border-radius: 50%; border: none; cursor: pointer;
+            font-size: 0.85rem; font-weight: 700; color: white; display: flex;
+            align-items: center; justify-content: center; flex-shrink: 0;
+            transition: transform 0.15s ease, background-color 0.15s ease;
+        }
+        .arrived-toggle-btn:active { transform: scale(0.92); }
+        .arrived-toggle-btn.mark-yes { background-color: #059669; }
+        .arrived-toggle-btn.mark-yes:hover { background-color: #047857; }
+        .arrived-toggle-btn.mark-undo { background-color: #a0aec0; }
+        .arrived-toggle-btn.mark-undo:hover { background-color: #718096; }
 
         .list-item.mt { border-left-color: #3182ce; background-color: #ebf8ff; }
         .list-item.jtj { border-left-color: #d97706; background-color: #fffbeb; }
@@ -160,13 +205,12 @@
         .list-item.ga { border-left-color: #7c3aed; background-color: #f5f3ff; }
         .list-item.past { opacity: 0.45; filter: grayscale(40%); }
 
-        .list-container.edit-mode .list-item { cursor: pointer; padding-right: 46px; }
+        .list-container.edit-mode .list-item { cursor: pointer; padding-right: 92px; }
         .list-container.edit-mode .list-item:hover { filter: brightness(0.97); }
 
         .delete-x {
-            display: none; position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
-            width: 26px; height: 26px; border-radius: 50%; background: white; border: 1px solid #e2e8f0;
-            color: #e53e3e; font-size: 1rem; align-items: center; justify-content: center; cursor: pointer;
+            display: none; width: 26px; height: 26px; border-radius: 50%; background: white; border: 1px solid #e2e8f0;
+            color: #e53e3e; font-size: 1rem; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;
         }
         .list-container.edit-mode .delete-x { display: flex; }
 
@@ -237,6 +281,13 @@
     </div>
 
     <div class="controls" id="controls">
+        <div class="arrival-prompt" id="arrival-prompt">
+            <span class="arrival-prompt-text" id="arrival-prompt-text"></span>
+            <div class="arrival-prompt-actions">
+                <button class="prompt-btn yes" onclick="answerPrompt(true)" title="Yes, arrived">&#10003;</button>
+                <button class="prompt-btn no" onclick="answerPrompt(false)" title="Not yet">&#10005;</button>
+            </div>
+        </div>
         <button class="view-all-btn" onclick="toggleModal()">View All Arrivals</button>
         <div><button class="new-file-btn" onclick="resetApp()">Load a different schedule</button></div>
     </div>
@@ -274,6 +325,23 @@
             GA:   { name: "Grounds Only Admission",     duration: 0  }
         };
 
+        // When multiple tours share the same arrival slot, this is the order
+        // they should always be presented/combined in (lowest number first).
+        // Anything not listed here (e.g. GA) sorts after all of these.
+        const TOUR_ORDER = { MT: 0, JTJ: 1, BABM: 2 };
+        function tourOrderRank(acronym) {
+            return TOUR_ORDER.hasOwnProperty(acronym) ? TOUR_ORDER[acronym] : 99;
+        }
+
+        // Per-tour accent color, used to color each tour's own segment of
+        // text when its name/visitor count is combined with other tours.
+        const TOUR_COLORS = {
+            MT:   '#3182ce',
+            JTJ:  '#d97706',
+            BABM: '#059669',
+            GA:   '#7c3aed'
+        };
+
         // How header column labels (from the FareHarbor dashboard's "items"
         // header row) map to our internal acronyms. Matching is done via
         // substring so minor label changes (e.g. "...: Civil War Tour") don't
@@ -298,6 +366,7 @@
         const errorText = document.getElementById('error-text');
 
         htmlInput.addEventListener('change', (e) => {
+            ensureAudioContext();
             const file = e.target.files[0];
             if (file) handleFile(file);
         });
@@ -310,6 +379,7 @@
             });
         });
         fileBtnWrapper.addEventListener('drop', (e) => {
+            ensureAudioContext();
             const file = e.dataTransfer.files && e.dataTransfer.files[0];
             if (file) handleFile(file);
         });
@@ -318,6 +388,7 @@
         // (e.g. Ctrl+U / "view source" then Ctrl+A, Ctrl+C) directly in.
         document.addEventListener('paste', (event) => {
             if (!document.getElementById('setup-view').classList.contains('active')) return;
+            ensureAudioContext();
             const cd = event.clipboardData || event.originalEvent.clipboardData;
             if (!cd) return;
             const text = cd.getData('text/plain') || cd.getData('text/html');
@@ -443,14 +514,20 @@
                             time: calculateArrivalTime(legendText, duration),
                             visitors,
                             baseTime: legendText,
-                            name
+                            name,
+                            arrived: false,
+                            snoozeUntil: null
                         });
                     });
                 });
             });
 
             const nonZero = results.filter(r => r.visitors > 0);
-            nonZero.sort((a, b) => parseTimeStringToDate(a.time) - parseTimeStringToDate(b.time));
+            nonZero.sort((a, b) => {
+                const diff = parseTimeStringToDate(a.time) - parseTimeStringToDate(b.time);
+                if (diff !== 0) return diff;
+                return tourOrderRank(a.acronym) - tourOrderRank(b.acronym);
+            });
             return nonZero;
         }
 
@@ -464,14 +541,18 @@
             document.getElementById('main-view').classList.add('active');
             document.getElementById('controls').classList.add('active');
 
-            updateDisplay(); populateList();
+            updateDisplay(); populateList(); refreshPrompt();
+            checkAutoArrive();
             setInterval(checkAutoAdvance, 60000);
+            setInterval(checkAutoArrive, 60000);
+            setInterval(refreshPrompt, 5000);
         }
 
         function resetApp() {
             schedule = [];
             currentIndex = 0;
             editMode = false;
+            hidePrompt();
             document.getElementById('main-view').classList.remove('active');
             document.getElementById('controls').classList.remove('active');
             document.getElementById('modal').classList.remove('open');
@@ -488,9 +569,74 @@
             currentIndex = 0;
             while (currentIndex < schedule.length) {
                 const arrivalTime = parseTimeStringToDate(schedule[currentIndex].time);
-                if (now >= new Date(arrivalTime.getTime() + 10 * 60000)) currentIndex++;
-                else break;
+                if (now >= new Date(arrivalTime.getTime() + 10 * 60000)) {
+                    currentIndex = getGroupBounds(currentIndex)[1] + 1;
+                } else break;
             }
+        }
+
+        // --- Simultaneous-arrival grouping helpers ---
+        // Entries sharing the same displayed arrival time are treated as one
+        // group on the main screen (though they stay separate rows in the
+        // "View All Arrivals" list). Since `schedule` is time-sorted, a
+        // group is always a contiguous run of indices.
+        function getGroupBounds(idx) {
+            if (idx < 0 || idx >= schedule.length) return [idx, idx];
+            const t = schedule[idx].time;
+            let start = idx, end = idx;
+            while (start > 0 && schedule[start - 1].time === t) start--;
+            while (end < schedule.length - 1 && schedule[end + 1].time === t) end++;
+            return [start, end];
+        }
+
+        // Sorts the schedule by time, and for tours sharing the same time,
+        // by the fixed presentation order (Mansion Tour -> Journey to
+        // Jubilee -> Battle at Belle Meade -> anything else).
+        function sortSchedule() {
+            schedule.sort((a, b) => {
+                const diff = parseTimeStringToDate(a.time) - parseTimeStringToDate(b.time);
+                if (diff !== 0) return diff;
+                return tourOrderRank(a.acronym) - tourOrderRank(b.acronym);
+            });
+        }
+
+        function unarrivedInGroup(start, end) {
+            const arr = [];
+            for (let i = start; i <= end; i++) if (!schedule[i].arrived) arr.push(i);
+            return arr;
+        }
+
+        function prevGroupStart(idx) {
+            const refIdx = idx - 1;
+            if (refIdx < 0 || refIdx >= schedule.length) return -1;
+            return getGroupBounds(refIdx)[0];
+        }
+
+        function nextGroupStart(idx) {
+            if (idx < 0 || idx >= schedule.length) return -1;
+            const next = getGroupBounds(idx)[1] + 1;
+            return next < schedule.length ? next : -1;
+        }
+
+        // Joins a list of strings the same way in every context that combines
+        // simultaneous arrivals: "A", "A & B", or "A, B & C".
+        function formatJoin(list) {
+            if (list.length === 0) return '';
+            if (list.length === 1) return list[0];
+            if (list.length === 2) return `${list[0]} & ${list[1]}`;
+            return `${list.slice(0, -1).join(', ')} & ${list[list.length - 1]}`;
+        }
+
+        // Same joining logic as formatJoin, but wraps each piece in a span
+        // colored for its own tour, so combined text (e.g. "Mansion Tour &
+        // Journey to Jubilee") shows each tour in its correct color instead
+        // of defaulting to a single accent color.
+        function formatJoinColored(items) {
+            if (items.length === 0) return '';
+            const spans = items.map(it => `<span style="color:${it.color}">${escapeHtml(it.text)}</span>`);
+            if (spans.length === 1) return spans[0];
+            if (spans.length === 2) return `${spans[0]} &amp; ${spans[1]}`;
+            return `${spans.slice(0, -1).join(', ')} &amp; ${spans[spans.length - 1]}`;
         }
 
         function escapeHtml(str) {
@@ -502,9 +648,10 @@
             const timeEl = document.getElementById('display-time');
             const nameEl = document.getElementById('display-name');
             const visitorsContainer = document.getElementById('visitors-container');
+            const visitorsEl = document.getElementById('display-visitors');
 
-            renderAdjacent('prev', currentIndex - 1);
-            renderAdjacent('next', currentIndex + 1);
+            renderAdjacent('prev', prevGroupStart(currentIndex));
+            renderAdjacent('next', nextGroupStart(currentIndex));
 
             if (schedule.length === 0 || currentIndex >= schedule.length) {
                 acronymEl.innerText = "All Caught Up!"; acronymEl.style.fontSize = "2.2rem";
@@ -514,17 +661,33 @@
             }
 
             acronymEl.style.fontSize = "1.5rem"; visitorsContainer.style.display = "block";
-            const current = schedule[currentIndex];
-            document.body.className = `theme-${current.acronym.toLowerCase()}`;
 
-            const fullName = (TOUR_INFO[current.acronym] && TOUR_INFO[current.acronym].name) || current.acronym;
+            const [start, end] = getGroupBounds(currentIndex);
+            let indices = unarrivedInGroup(start, end);
+            if (indices.length === 0) { // fallback safety net; shouldn't normally happen
+                for (let i = start; i <= end; i++) indices.push(i);
+            }
 
-            acronymEl.innerText = fullName; timeEl.innerText = current.time;
-            document.getElementById('display-visitors').innerText = current.visitors;
+            const primary = schedule[indices[0]];
+            document.body.className = `theme-${primary.acronym.toLowerCase()}`;
 
-            if (current.name) {
+            const nameItems = indices.map(i => ({
+                text: (TOUR_INFO[schedule[i].acronym] && TOUR_INFO[schedule[i].acronym].name) || schedule[i].acronym,
+                color: TOUR_COLORS[schedule[i].acronym] || 'var(--accent)'
+            }));
+            const visitorItems = indices.map(i => ({
+                text: String(schedule[i].visitors),
+                color: TOUR_COLORS[schedule[i].acronym] || 'var(--accent)'
+            }));
+            const guestNames = indices.map(i => schedule[i].name).filter(Boolean);
+
+            acronymEl.innerHTML = formatJoinColored(nameItems);
+            timeEl.innerText = primary.time;
+            visitorsEl.innerHTML = formatJoinColored(visitorItems);
+
+            if (guestNames.length > 0) {
                 nameEl.style.display = "block";
-                nameEl.innerText = current.name;
+                nameEl.innerText = formatJoin(guestNames);
             } else {
                 nameEl.style.display = "none";
                 nameEl.innerText = "";
@@ -532,8 +695,8 @@
         }
 
         // Renders the small, faded preview card above (prev) or below (next)
-        // the current tour in the carousel. Hides itself if there's no tour
-        // at that index (e.g. at the start/end of the list).
+        // the current tour group in the carousel. Hides itself if there's no
+        // tour group at that index (e.g. at the start/end of the list).
         function renderAdjacent(which, idx) {
             const wrapper = document.getElementById(`item-${which}`);
             const acronymEl = document.getElementById(`${which}-acronym`);
@@ -543,16 +706,22 @@
 
             if (idx < 0 || idx >= schedule.length) {
                 wrapper.classList.add('empty');
-                acronymEl.innerText = ''; timeEl.innerText = '';
+                acronymEl.innerHTML = ''; timeEl.innerText = '';
                 return;
             }
 
-            const item = schedule[idx];
+            const [start, end] = getGroupBounds(idx);
+            const nameItems = [];
+            for (let i = start; i <= end; i++) {
+                nameItems.push({
+                    text: (TOUR_INFO[schedule[i].acronym] && TOUR_INFO[schedule[i].acronym].name) || schedule[i].acronym,
+                    color: TOUR_COLORS[schedule[i].acronym] || 'var(--text-muted)'
+                });
+            }
             wrapper.classList.remove('empty');
-            wrapper.classList.add(item.acronym.toLowerCase());
-            const fullName = (TOUR_INFO[item.acronym] && TOUR_INFO[item.acronym].name) || item.acronym;
-            acronymEl.innerText = fullName;
-            timeEl.innerText = item.time;
+            wrapper.classList.add(schedule[start].acronym.toLowerCase());
+            acronymEl.innerHTML = formatJoinColored(nameItems);
+            timeEl.innerText = schedule[start].time;
         }
 
         function acronymOptionsHTML(selected) {
@@ -562,13 +731,108 @@
             }).join('');
         }
 
+        // --- Arrival confirmation prompt ---
+        // Asks (one at a time) whether each unconfirmed, due tour in the
+        // current group has arrived. A "no" snoozes just that tour for 5
+        // minutes and, if another tour in the same group is still waiting,
+        // immediately moves on to ask about that one instead.
+        let promptIndex = null;
+        let promptVisible = false;
+
+        function refreshPrompt() {
+            const box = document.getElementById('arrival-prompt');
+            const textEl = document.getElementById('arrival-prompt-text');
+
+            if (schedule.length === 0 || currentIndex >= schedule.length) { hidePrompt(); return; }
+
+            const [start, end] = getGroupBounds(currentIndex);
+            const unarrived = unarrivedInGroup(start, end);
+            if (unarrived.length === 0) { hidePrompt(); return; }
+
+            const now = new Date();
+            if (now < parseTimeStringToDate(schedule[currentIndex].time)) { hidePrompt(); return; }
+
+            const askableIdx = unarrived.find(i => !schedule[i].snoozeUntil || now >= schedule[i].snoozeUntil);
+            if (askableIdx === undefined) { hidePrompt(); return; } // all snoozed for now
+
+            const isNewQuestion = promptIndex !== askableIdx;
+            const wasVisible = promptVisible;
+            promptIndex = askableIdx;
+
+            const entry = schedule[askableIdx];
+            const fullName = (TOUR_INFO[entry.acronym] && TOUR_INFO[entry.acronym].name) || entry.acronym;
+            textEl.innerText = `Did ${fullName} at ${entry.time} arrive?`;
+            box.style.display = 'flex';
+            promptVisible = true;
+
+            if (!wasVisible || isNewQuestion) playDing();
+        }
+
+        function hidePrompt() {
+            document.getElementById('arrival-prompt').style.display = 'none';
+            promptVisible = false;
+            promptIndex = null;
+        }
+
+        function answerPrompt(didArrive) {
+            if (promptIndex === null) return;
+            const entry = schedule[promptIndex];
+
+            if (didArrive) {
+                entry.arrived = true;
+                entry.snoozeUntil = null;
+                const [start, end] = getGroupBounds(promptIndex);
+                if (unarrivedInGroup(start, end).length === 0) {
+                    // Whole group confirmed — advance to the next one.
+                    currentIndex = end + 1;
+                    animateTransition(1);
+                    return;
+                }
+            } else {
+                entry.snoozeUntil = new Date(Date.now() + 5 * 60000);
+            }
+
+            updateDisplay();
+            populateList();
+            refreshPrompt();
+        }
+
+        // A soft two-note chime, kept quiet so it doesn't startle anyone.
+        let audioCtx = null;
+        function ensureAudioContext() {
+            if (!audioCtx) {
+                try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { /* no-op */ }
+            } else if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playDing() {
+            if (!audioCtx) return;
+            const now = audioCtx.currentTime;
+            const gainNode = audioCtx.createGain();
+            gainNode.gain.setValueAtTime(0.0001, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.1, now + 0.03);
+            gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+            gainNode.connect(audioCtx.destination);
+
+            [880, 1318.5].forEach((freq, i) => {
+                const osc = audioCtx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                osc.connect(gainNode);
+                osc.start(now + i * 0.1);
+                osc.stop(now + 1.2);
+            });
+        }
+
         function populateList(editingIdx = -1) {
             const listEl = document.getElementById('list-container');
             listEl.innerHTML = '';
             schedule.forEach((item, idx) => {
                 const div = document.createElement('div');
                 const themeClass = item.acronym.toLowerCase();
-                const pastClass = idx < currentIndex ? 'past' : '';
+                const pastClass = item.arrived ? 'past' : '';
                 div.className = `list-item ${themeClass} ${pastClass}`;
 
                 if (editMode && idx === editingIdx) {
@@ -590,7 +854,12 @@
                             ${item.name ? `<div class="list-guest-name">${escapeHtml(item.name)}</div>` : ''}
                             <div style="font-size: 0.8rem; color: #a0aec0; margin-top: 4px;">Tour Start: ${item.baseTime}</div>
                         </div>
-                        <div class="delete-x" onclick="deleteEntry(${idx}, event)" title="Remove">&times;</div>
+                        <div class="list-actions">
+                            <button class="arrived-toggle-btn ${item.arrived ? 'mark-undo' : 'mark-yes'}"
+                                onclick="toggleArrived(${idx}, event)"
+                                title="${item.arrived ? 'Mark as not arrived' : 'Mark as arrived'}">${item.arrived ? '&times;' : '&#10003;'}</button>
+                            <div class="delete-x" onclick="deleteEntry(${idx}, event)" title="Remove">&times;</div>
+                        </div>
                     `;
                     if (editMode) {
                         div.addEventListener('click', () => populateList(idx));
@@ -626,15 +895,17 @@
                 time: calculateArrivalTime(baseTimeStr, duration),
                 visitors: visitorsVal,
                 baseTime: baseTimeStr,
-                name: nameVal
+                name: nameVal,
+                arrived: false,
+                snoozeUntil: null
             });
-            schedule.sort((a, b) => parseTimeStringToDate(a.time) - parseTimeStringToDate(b.time));
+            sortSchedule();
 
             recalcCurrentIndex();
             document.getElementById('add-time').value = '';
             document.getElementById('add-visitors').value = '';
             document.getElementById('add-name').value = '';
-            updateDisplay(); populateList();
+            updateDisplay(); populateList(); refreshPrompt();
         }
 
         function saveEditEntry(idx) {
@@ -649,21 +920,35 @@
 
             const baseTimeStr = to12hr(timeVal);
             const duration = (TOUR_INFO[acronym] && TOUR_INFO[acronym].duration) || 0;
+            const prevArrived = schedule[idx].arrived;
+            const prevSnooze = schedule[idx].snoozeUntil;
 
             schedule[idx] = {
                 acronym, time: calculateArrivalTime(baseTimeStr, duration),
-                visitors: visitorsVal, baseTime: baseTimeStr, name: nameVal
+                visitors: visitorsVal, baseTime: baseTimeStr, name: nameVal,
+                arrived: prevArrived, snoozeUntil: prevSnooze
             };
-            schedule.sort((a, b) => parseTimeStringToDate(a.time) - parseTimeStringToDate(b.time));
+            sortSchedule();
 
-            recalcCurrentIndex(); updateDisplay(); populateList();
+            recalcCurrentIndex(); updateDisplay(); populateList(); refreshPrompt();
+        }
+
+        function toggleArrived(idx, evt) {
+            if (evt) evt.stopPropagation();
+            const item = schedule[idx];
+            item.arrived = !item.arrived;
+            item.snoozeUntil = null;
+            recalcCurrentIndex();
+            updateDisplay();
+            populateList();
+            refreshPrompt();
         }
 
         function deleteEntry(idx, evt) {
             if (evt) evt.stopPropagation();
             if (!confirm("Remove this arrival?")) return;
             schedule.splice(idx, 1);
-            recalcCurrentIndex(); updateDisplay(); populateList();
+            recalcCurrentIndex(); updateDisplay(); populateList(); refreshPrompt();
         }
 
         function to12hr(timeVal) {
@@ -683,12 +968,19 @@
             return `${hh}:${mm}`;
         }
 
-        // --- Navigation (Touch + Arrows) ---
+        // --- Navigation (Scroll + Swipe) ---
+        // currentIndex always points at the start of a group (or
+        // schedule.length when everything's been passed), so navigating
+        // always jumps a full group at a time.
         function navigate(direction) {
-            if (direction === -1 && currentIndex > 0) {
-                currentIndex--;
-            } else if (direction === 1 && currentIndex < schedule.length) {
-                currentIndex++;
+            if (direction === -1) {
+                const target = prevGroupStart(currentIndex);
+                if (target === -1) return;
+                currentIndex = target;
+            } else if (direction === 1) {
+                const target = nextGroupStart(currentIndex);
+                if (currentIndex >= schedule.length) return;
+                currentIndex = target === -1 ? schedule.length : target;
             } else {
                 return;
             }
@@ -710,6 +1002,7 @@
             setTimeout(() => {
                 updateDisplay();
                 populateList();
+                refreshPrompt();
 
                 carousel.style.transition = 'none';
                 carousel.style.transform = `translateY(${-outOffset}px)`;
@@ -768,11 +1061,36 @@
             return `${h}:${m} ${modifier}`;
         }
 
+        // Any tour still unconfirmed an hour past its expected time is
+        // auto-marked as arrived, regardless of what's currently on screen.
+        function checkAutoArrive() {
+            const now = new Date();
+            let changed = false;
+            schedule.forEach(item => {
+                if (!item.arrived) {
+                    const expected = parseTimeStringToDate(item.time);
+                    if (now >= new Date(expected.getTime() + 60 * 60000)) {
+                        item.arrived = true;
+                        item.snoozeUntil = null;
+                        changed = true;
+                    }
+                }
+            });
+            if (changed) {
+                recalcCurrentIndex();
+                updateDisplay();
+                populateList();
+                refreshPrompt();
+            }
+        }
+
         function checkAutoAdvance() {
             if (currentIndex >= schedule.length) return;
             const arrivalTime = parseTimeStringToDate(schedule[currentIndex].time);
             if (new Date() >= new Date(arrivalTime.getTime() + 10 * 60000)) {
-                currentIndex++; animateTransition(1);
+                const [, end] = getGroupBounds(currentIndex);
+                currentIndex = end + 1;
+                animateTransition(1);
             }
         }
     </script>
