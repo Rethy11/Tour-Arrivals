@@ -14,10 +14,10 @@
             --accent-hover: #2b6cb0;
         }
 
-        body.theme-mt { --bg-color: #fffbeb; --accent: #d97706; --accent-hover: #b45309; }
-        body.theme-jtj { --bg-color: #ecfdf5; --accent: #059669; --accent-hover: #047857; }
-        body.theme-babm { --bg-color: #fef2f2; --accent: #dc2626; --accent-hover: #b91c1c; }
-        body.theme-ga { --bg-color: #ebf8ff; --accent: #3182ce; --accent-hover: #2b6cb0; }
+        body.theme-mt { --bg-color: #ebf8ff; --accent: #3182ce; --accent-hover: #2b6cb0; }
+        body.theme-jtj { --bg-color: #fffbeb; --accent: #d97706; --accent-hover: #b45309; }
+        body.theme-babm { --bg-color: #ecfdf5; --accent: #059669; --accent-hover: #047857; }
+        body.theme-ga { --bg-color: #f5f3ff; --accent: #7c3aed; --accent-hover: #6d28d9; }
 
         body, html {
             margin: 0; padding: 0;
@@ -71,36 +71,34 @@
         .visitors { font-size: 1.5rem; margin-top: 10px; color: var(--text-muted); }
         .visitors span { font-weight: bold; color: var(--accent); transition: color 0.4s ease; }
 
-        /* Navigation Arrows */
-        .nav-arrow {
-            position: absolute;
-            top: 50%;
-            transform: translateY(-50%);
-            background: rgba(0, 0, 0, 0.04);
-            border: none;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
+        /* Carousel (scroll-based navigation) */
+        .carousel {
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
-            font-size: 1.5rem;
-            color: var(--text-muted);
-            cursor: pointer;
-            transition: background 0.2s, color 0.2s, opacity 0.2s;
-            z-index: 5;
+            width: 100%;
+            gap: 18px;
+            touch-action: pan-y;
+            will-change: transform, opacity;
         }
-        .nav-arrow:hover {
-            background: rgba(0, 0, 0, 0.08);
-            color: var(--text-main);
-        }
-        .nav-arrow.left { left: 20px; }
-        .nav-arrow.right { right: 20px; }
-        .nav-arrow.disabled {
-            opacity: 0;
+        .carousel-item.adjacent {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            opacity: 0.18;
+            transform: scale(0.7);
+            filter: grayscale(30%);
+            transition: opacity 0.3s ease, transform 0.3s ease;
             pointer-events: none;
-            cursor: default;
         }
+        .carousel-item.adjacent.empty { visibility: hidden; }
+        .adj-acronym { font-size: 1rem; font-weight: 700; letter-spacing: 1px; color: var(--text-muted); }
+        .adj-time { font-size: 2.2rem; font-weight: 700; margin-top: 2px; color: var(--text-main); }
+        .carousel-item.adjacent.mt .adj-acronym { color: #3182ce; }
+        .carousel-item.adjacent.jtj .adj-acronym { color: #d97706; }
+        .carousel-item.adjacent.babm .adj-acronym { color: #059669; }
+        .carousel-item.adjacent.ga .adj-acronym { color: #7c3aed; }
 
         .controls { display: none; text-align: center; width: 100%; padding-bottom: 40px; }
         .controls.active { display: block; }
@@ -156,10 +154,10 @@
             border-left: 6px solid #e2e8f0; transition: opacity 0.3s, filter 0.3s;
         }
 
-        .list-item.mt { border-left-color: #d97706; background-color: #fffbeb; }
-        .list-item.jtj { border-left-color: #059669; background-color: #ecfdf5; }
-        .list-item.babm { border-left-color: #dc2626; background-color: #fef2f2; }
-        .list-item.ga { border-left-color: #3182ce; background-color: #ebf8ff; }
+        .list-item.mt { border-left-color: #3182ce; background-color: #ebf8ff; }
+        .list-item.jtj { border-left-color: #d97706; background-color: #fffbeb; }
+        .list-item.babm { border-left-color: #059669; background-color: #ecfdf5; }
+        .list-item.ga { border-left-color: #7c3aed; background-color: #f5f3ff; }
         .list-item.past { opacity: 0.45; filter: grayscale(40%); }
 
         .list-container.edit-mode .list-item { cursor: pointer; padding-right: 46px; }
@@ -184,16 +182,14 @@
         .list-details { text-align: right; color: var(--text-muted); }
         .list-details span { font-weight: bold; color: var(--text-main); }
         .list-acronym { font-weight: 700; font-size: 0.9rem; }
-        .list-item.mt .list-acronym { color: #d97706; }
-        .list-item.jtj .list-acronym { color: #059669; }
-        .list-item.babm .list-acronym { color: #dc2626; }
-        .list-item.ga .list-acronym { color: #3182ce; }
+        .list-item.mt .list-acronym { color: #3182ce; }
+        .list-item.jtj .list-acronym { color: #d97706; }
+        .list-item.babm .list-acronym { color: #059669; }
+        .list-item.ga .list-acronym { color: #7c3aed; }
         .list-guest-name { font-size: 0.85rem; color: var(--text-main); margin-top: 3px; font-weight: 600; }
 
         @media (max-width: 600px) {
-            .nav-arrow { width: 40px; height: 40px; font-size: 1.2rem; }
-            .nav-arrow.left { left: 10px; }
-            .nav-arrow.right { right: 10px; }
+            .adj-time { font-size: 1.8rem; }
         }
     </style>
 </head>
@@ -220,14 +216,23 @@
     </div>
 
     <div id="main-view" class="view">
-        <button class="nav-arrow left disabled" id="nav-left" onclick="navigate(-1)" title="Previous">&#10094;</button>
-        <button class="nav-arrow right disabled" id="nav-right" onclick="navigate(1)" title="Next">&#10095;</button>
+        <div class="carousel" id="carousel">
+            <div class="carousel-item adjacent empty" id="item-prev">
+                <div class="adj-acronym" id="prev-acronym"></div>
+                <div class="adj-time" id="prev-time"></div>
+            </div>
 
-        <div id="main-view-content">
-            <div class="acronym" id="display-acronym">--</div>
-            <div class="time" id="display-time">--:--</div>
-            <div class="guest-name" id="display-name"></div>
-            <div class="visitors" id="visitors-container">Expected Visitors: <span id="display-visitors">-</span></div>
+            <div id="main-view-content">
+                <div class="acronym" id="display-acronym">--</div>
+                <div class="time" id="display-time">--:--</div>
+                <div class="guest-name" id="display-name"></div>
+                <div class="visitors" id="visitors-container">Expected Visitors: <span id="display-visitors">-</span></div>
+            </div>
+
+            <div class="carousel-item adjacent empty" id="item-next">
+                <div class="adj-acronym" id="next-acronym"></div>
+                <div class="adj-time" id="next-time"></div>
+            </div>
         </div>
     </div>
 
@@ -291,8 +296,6 @@
         const progressFill = document.getElementById('progress-fill');
         const statusText = document.getElementById('status-text');
         const errorText = document.getElementById('error-text');
-        const navLeft = document.getElementById('nav-left');
-        const navRight = document.getElementById('nav-right');
 
         htmlInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
@@ -500,9 +503,8 @@
             const nameEl = document.getElementById('display-name');
             const visitorsContainer = document.getElementById('visitors-container');
 
-            // Manage arrow states
-            if (navLeft) navLeft.classList.toggle('disabled', currentIndex === 0 || schedule.length === 0);
-            if (navRight) navRight.classList.toggle('disabled', currentIndex >= schedule.length);
+            renderAdjacent('prev', currentIndex - 1);
+            renderAdjacent('next', currentIndex + 1);
 
             if (schedule.length === 0 || currentIndex >= schedule.length) {
                 acronymEl.innerText = "All Caught Up!"; acronymEl.style.fontSize = "2.2rem";
@@ -527,6 +529,30 @@
                 nameEl.style.display = "none";
                 nameEl.innerText = "";
             }
+        }
+
+        // Renders the small, faded preview card above (prev) or below (next)
+        // the current tour in the carousel. Hides itself if there's no tour
+        // at that index (e.g. at the start/end of the list).
+        function renderAdjacent(which, idx) {
+            const wrapper = document.getElementById(`item-${which}`);
+            const acronymEl = document.getElementById(`${which}-acronym`);
+            const timeEl = document.getElementById(`${which}-time`);
+
+            wrapper.classList.remove('mt', 'jtj', 'babm', 'ga');
+
+            if (idx < 0 || idx >= schedule.length) {
+                wrapper.classList.add('empty');
+                acronymEl.innerText = ''; timeEl.innerText = '';
+                return;
+            }
+
+            const item = schedule[idx];
+            wrapper.classList.remove('empty');
+            wrapper.classList.add(item.acronym.toLowerCase());
+            const fullName = (TOUR_INFO[item.acronym] && TOUR_INFO[item.acronym].name) || item.acronym;
+            acronymEl.innerText = fullName;
+            timeEl.innerText = item.time;
         }
 
         function acronymOptionsHTML(selected) {
@@ -666,24 +692,57 @@
             } else {
                 return;
             }
-            animateTransition(); updateDisplay(); populateList();
+            animateTransition(direction);
         }
 
-        let touchstartX = 0, touchendX = 0;
+        // Slides the whole carousel out in the direction of travel, swaps in
+        // the new current/prev/next content while off-screen, then slides it
+        // back in from the opposite side — giving the effect of scrolling
+        // through a continuous list rather than a hard cut.
+        function animateTransition(direction = 1) {
+            const carousel = document.getElementById('carousel');
+            const outOffset = direction > 0 ? -36 : 36;
+
+            carousel.style.transition = 'transform 0.2s ease-in, opacity 0.2s ease-in';
+            carousel.style.transform = `translateY(${outOffset}px)`;
+            carousel.style.opacity = '0';
+
+            setTimeout(() => {
+                updateDisplay();
+                populateList();
+
+                carousel.style.transition = 'none';
+                carousel.style.transform = `translateY(${-outOffset}px)`;
+                void carousel.offsetHeight; // force reflow so the jump isn't animated
+
+                carousel.style.transition = 'transform 0.25s ease-out, opacity 0.25s ease-out';
+                carousel.style.transform = 'translateY(0)';
+                carousel.style.opacity = '1';
+            }, 200);
+        }
+
         const mainView = document.getElementById('main-view');
 
-        mainView.addEventListener('touchstart', e => { touchstartX = e.changedTouches[0].screenX; });
-        mainView.addEventListener('touchend', e => {
-            touchendX = e.changedTouches[0].screenX;
-            if (touchstartX - touchendX > 50) navigate(1); // Swipe left = next
-            if (touchendX - touchstartX > 50) navigate(-1); // Swipe right = previous
-        });
+        // Scroll-wheel navigation (trackpad / mouse wheel). A short cooldown
+        // stops one physical scroll gesture from firing multiple navigations.
+        let scrollLocked = false;
+        mainView.addEventListener('wheel', e => {
+            e.preventDefault();
+            if (scrollLocked) return;
+            if (Math.abs(e.deltaY) < 15) return;
+            scrollLocked = true;
+            navigate(e.deltaY > 0 ? 1 : -1);
+            setTimeout(() => { scrollLocked = false; }, 400);
+        }, { passive: false });
 
-        function animateTransition() {
-            const content = document.getElementById('main-view-content');
-            content.style.opacity = 0;
-            setTimeout(() => { content.style.opacity = 1; }, 150);
-        }
+        // Vertical swipe navigation for touch devices.
+        let touchstartY = 0, touchendY = 0;
+        mainView.addEventListener('touchstart', e => { touchstartY = e.changedTouches[0].screenY; });
+        mainView.addEventListener('touchend', e => {
+            touchendY = e.changedTouches[0].screenY;
+            if (touchstartY - touchendY > 50) navigate(1);  // Swipe up = next
+            if (touchendY - touchstartY > 50) navigate(-1); // Swipe down = previous
+        });
 
         function toggleModal() { document.getElementById('modal').classList.toggle('open'); }
 
@@ -713,7 +772,7 @@
             if (currentIndex >= schedule.length) return;
             const arrivalTime = parseTimeStringToDate(schedule[currentIndex].time);
             if (new Date() >= new Date(arrivalTime.getTime() + 10 * 60000)) {
-                currentIndex++; animateTransition(); updateDisplay(); populateList();
+                currentIndex++; animateTransition(1);
             }
         }
     </script>
