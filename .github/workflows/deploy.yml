@@ -23,9 +23,15 @@ jobs:
 
       - name: Prepare deploy folder
         run: |
-          mkdir -p _site
-          cp -r . _site
-          rm -rf _site/.git _site/.github
+          # Build the deploy copy OUTSIDE the checkout dir. Doing
+          # `cp -r . _site` while _site lives inside "." makes cp try to
+          # copy _site into itself, which fails (exit 1) and — since
+          # Actions runs steps with `bash -e` — silently kills this step
+          # and every step after it, so the placeholder injection below
+          # never runs and nothing new ever deploys.
+          mkdir -p /tmp/_site
+          cp -r . /tmp/_site
+          rm -rf /tmp/_site/.git /tmp/_site/.github
 
       - name: Inject config from secrets
         env:
@@ -39,7 +45,7 @@ jobs:
           python3 - <<'PYEOF'
           import os, sys
 
-          path = "_site/index.html"
+          path = "/tmp/_site/index.html"
           with open(path, encoding="utf-8") as f:
               content = f.read()
 
@@ -69,7 +75,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: _site
+          path: /tmp/_site
 
   deploy:
     needs: build
